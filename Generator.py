@@ -8,6 +8,7 @@
 from PIL import Image
 from random import randint
 from math import sqrt, log
+from multiprocessing import Process, Manager, Queue
 
 
 class Colors:
@@ -46,8 +47,7 @@ def generate_map(size, seedamount):
 		fullmap.append([])
 	for row in range(size[1]):
 		for column in range(size[0]):
-			fullmap[column].append(0)
-
+			fullmap[column].append(column)
 	# now we select some random pixels that will become our seeds
 	seedposlist = []
 	for _ in range(seedamount):
@@ -65,28 +65,60 @@ def generate_map(size, seedamount):
 	return fullmap, seedposlist
 
 
-def color_in(map, seedlist, showseeds=False):
-	print('coloring in the map...')
+def chunkit(seq, num):
+	# divides a list into lists of roughly equal sizes.
+	# completely stolen from the internet, no questions.
+	avg = len(seq) / float(num)
+	out = []
+	last = 0.0
+	while last < len(seq):
+		out.append(seq[int(last):int(last + avg)])
+		last += avg
+	return out
+
+
+def divide_work(map, seedlist, cores=1):
+	print('dividing the work over ' + str(cores) + ' cores...')
+	threadlist = []
+	queue = Queue()
+	splitmap = chunkit(map, cores)
+	for i in range(cores):
+		startpos = splitmap[i][0][0]
+		t = Process(target=color_in, args=(i, startpos, splitmap[i], seedlist, queue, Colors.list,))
+		threadlist.append(t)
+	for thread in threadlist:
+		thread.start()
+	scrambledmap = []
+	while len(scrambledmap) < cores:
+		scrambledmap.append(queue.get())
+	coloredmap = []
+	for i in range(cores):
+		for block in scrambledmap:
+			if block[-1] == i:
+				coloredmap.append(block[:len(block) - 1])
+	new = [x for y in coloredmap for x in y]  	# for some reason we have nested lists, this fixes that
+	return new
+
+
+def color_in(number, startpos, map, seedlist, queue, colorlist, showseeds=False):
+	print('Proces ' + str(number) + ': going to color ' + str(len(map)) + ' columns!')
 	for x in range(len(map)):
 		for y in range(len(map[0])):
 			closest = 1000000000
 			closestone = 0
 			for index, seed in enumerate(seedlist):
-				if get_distance([x, y], seed) < closest:
+				if get_distance([x + startpos, y], seed) < closest:
 					closestone = index
-					closest = get_distance([x, y], seed)
-				if get_distance([x, y], seed) < 3 and showseeds:
+					closest = get_distance([x + startpos, y], seed)
+				if get_distance([x + startpos, y], seed) < 3 and showseeds:
 					closestone = -1
-			try:
-				color = Colors.list[closestone]
-			except IndexError:
-				print('Color error! - ignoring...')
-				color = Colors.list[closestone - 1]
+			color = colorlist[closestone]
 			map[x][y] = color
-		if x % (len(map) / 10) == 0:
+		if x % (len(map) / 20) == 0:
 			print('coloring progress: ', str(int(round(100 * x / len(map), 2))) + '%')
 	print('done with coloring')
-	return map
+	map.append(number)
+	queue.put(map)
 
 
 def convert_to_image(pixellist, number=0):
@@ -103,8 +135,9 @@ def convert_to_image(pixellist, number=0):
 	img.save('image' + str(number) + '.png')
 	print('done with converting')
 
-size = [600, 600]
-mapvalues, seedlist = generate_map(size, 200)
-Colors(size, seedlist)
-mapcolor = color_in(mapvalues, seedlist)
-convert_to_image(mapcolor)
+if __name__ == '__main__':
+	size = [500, 500]
+	mapvalues, seedlist = generate_map(size, 500)
+	Colors(size, seedlist)
+	mapcolor = divide_work(mapvalues, seedlist, 8)
+	convert_to_image(mapcolor)
