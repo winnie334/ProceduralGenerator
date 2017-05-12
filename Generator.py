@@ -8,7 +8,18 @@
 from PIL import Image
 from random import randint
 from math import sqrt, log
-from multiprocessing import Process, Manager, Queue
+from multiprocessing import Process, Queue
+
+
+class Centers:
+	list = []
+	# list holds lists, with each sublist holding the values [x, y, size]
+
+	def __init__(self, mapsize, amount, size=200):
+		for i in range(amount):
+			x = randint(0, mapsize[0])
+			y = randint(0, mapsize[1])
+			Centers.list.append([x, y, size])
 
 
 class Colors:
@@ -17,7 +28,15 @@ class Colors:
 	def __init__(self, size, seedlist):
 		print('generating colors...')
 		for seed in seedlist:
-			dis = get_distance(seed, [size[0] / 2, size[1] / 2])
+			closest = 1000000000
+			closestone = 0
+			for index, center in enumerate(Centers.list):
+				if get_distance(seed, center) < closest:
+					closestone = index
+					closest = get_distance(seed, center)
+			closestcenter = Centers.list[closestone]
+			dis = get_distance(seed, closestcenter[0:2])
+			dis = int(dis / 200 * closestcenter[2])
 			if dis > 200:
 				newcolor = (randint(30, 35), 200 - int(dis / 2), 500 - dis)		# blue sea
 			elif 200 >= dis > 150:
@@ -30,7 +49,7 @@ class Colors:
 				newcolor = (255 - dis, 255 - dis, 255 - dis)					# snow
 			Colors.list.append(newcolor)
 		Colors.list.append((0, 0, 0))
-		print('colors generated (' + str(len(Colors.list)) + ')')
+		print('colors generated')
 
 
 def get_distance(point1, point2):
@@ -38,7 +57,7 @@ def get_distance(point1, point2):
 
 
 def generate_map(size, seedamount):
-	print('generating empty map with seedlist... (' + str(size[0]) + 'x' + str(size[1]) + ')')
+	print('generating empty map... (' + str(size[0]) + 'x' + str(size[1]) + ')')
 	fullmap = []
 	center = [size[0] / 2, size[1] / 2]
 
@@ -48,8 +67,22 @@ def generate_map(size, seedamount):
 	for row in range(size[1]):
 		for column in range(size[0]):
 			fullmap[column].append(column)
+	print('empty map generated')
+
 	# now we select some random pixels that will become our seeds
+	print('generating seedlist... (' + str(seedamount) + ' seeds)')
+	if seedamount <= 100:
+		print('heh, this is gonna be quick')
+	elif 1000 >= seedamount > 500:
+		print('this is going to be pretty')
+	elif 3000 >= seedamount > 1000:
+		print("oh, you like it intense? This is gonna take a while, but let's do it!")
+	elif seedamount > 3000:
+		print('wait... WHAT THE HELL ARE YOU THINKING??')
+		print(str(seedamount) + ' SEEDS? THIS IS GOING TO TAKE AGES!')
+		print("anyway... I guess we'll continue...")
 	seedposlist = []
+	rerolls = 0
 	for _ in range(seedamount):
 		reroll = 1
 		while reroll == 1:
@@ -57,11 +90,12 @@ def generate_map(size, seedamount):
 			seed = [randint(0, size[0]), randint(0, size[1])]
 			for otherseed in seedposlist:
 				if get_distance(seed, otherseed) < size[0] / seedamount:
+					rerolls += 1
 					reroll = 1
 		if seed not in seedposlist:
 			seedposlist.append(seed)
 
-	print('empty map with seedlist generated')
+	print('seedlist generated (' + str(rerolls) + ' rerolls)')
 	return fullmap, seedposlist
 
 
@@ -80,17 +114,28 @@ def chunkit(seq, num):
 def divide_work(map, seedlist, cores=1):
 	print('dividing the work over ' + str(cores) + ' cores...')
 	threadlist = []
-	queue = Queue()
+	mapqueue = Queue()
+	progressqueue = Queue()
 	splitmap = chunkit(map, cores)
 	for i in range(cores):
 		startpos = splitmap[i][0][0]
-		t = Process(target=color_in, args=(i, startpos, splitmap[i], seedlist, queue, Colors.list,))
+		t = Process(target=color_in, args=(i, startpos, splitmap[i], seedlist, mapqueue, progressqueue, Colors.list,))
 		threadlist.append(t)
 	for thread in threadlist:
 		thread.start()
 	scrambledmap = []
+	percentages = [0 for _ in range(cores)]
+	lastaverage = 0
+	average = 0
+	while int(average) != 100:
+		progress = progressqueue.get()
+		percentages[progress[-1]] = progress[0]
+		average = sum(percentages) / len(percentages)
+		if average > lastaverage + 1:
+			print('coloring progress: ' + str(round(average, 2)) + '%')
+			lastaverage = average
 	while len(scrambledmap) < cores:
-		scrambledmap.append(queue.get())
+		scrambledmap.append(mapqueue.get())
 	coloredmap = []
 	for i in range(cores):
 		for block in scrambledmap:
@@ -100,8 +145,8 @@ def divide_work(map, seedlist, cores=1):
 	return new
 
 
-def color_in(number, startpos, map, seedlist, queue, colorlist, showseeds=False):
-	print('Proces ' + str(number) + ': going to color ' + str(len(map)) + ' columns!')
+def color_in(number, startpos, map, seedlist, queue, progressqueue, colorlist, showseeds=False):
+	print('Process ' + str(number) + ': going to color ' + str(len(map)) + ' columns!')
 	for x in range(len(map)):
 		for y in range(len(map[0])):
 			closest = 1000000000
@@ -114,9 +159,8 @@ def color_in(number, startpos, map, seedlist, queue, colorlist, showseeds=False)
 					closestone = -1
 			color = colorlist[closestone]
 			map[x][y] = color
-		if x % (len(map) / 20) == 0:
-			print('coloring progress: ', str(int(round(100 * x / len(map), 2))) + '%')
-	print('done with coloring')
+		progressqueue.put([100 * (x + 1) / len(map), number])
+	print('Process ' + str(number) + ': done coloring')
 	map.append(number)
 	queue.put(map)
 
@@ -136,8 +180,9 @@ def convert_to_image(pixellist, number=0):
 	print('done with converting')
 
 if __name__ == '__main__':
-	size = [500, 500]
-	mapvalues, seedlist = generate_map(size, 500)
+	size = [300, 300]
+	mapvalues, seedlist = generate_map(size, 600)
+	Centers(size, 2, 600)
 	Colors(size, seedlist)
-	mapcolor = divide_work(mapvalues, seedlist, 8)
+	mapcolor = divide_work(mapvalues, seedlist, 7)
 	convert_to_image(mapcolor)
