@@ -19,9 +19,9 @@ class Colors:
 			dis = get_distance(seed, [size[0] / 2, size[1] / 2])
 			if dis > 200:
 				newcolor = (randint(30, 35), 200 - int(dis / 2), 500 - dis)		# blue sea
-			elif 200 >= dis > 140:
+			elif 200 >= dis > 150:
 				newcolor = (dis + 50, dis + 50, randint(15, 30))				# beach color
-			elif 140 >= dis > 70:
+			elif 150 >= dis > 70:
 				newcolor = (int(dis / 4), dis, int(dis / 4))							# grass
 			elif 70 >= dis > 30:
 				newcolor = (230 - dis, 230 - dis, 220 - dis)					# mountain
@@ -103,8 +103,8 @@ def convert_to_image(pixellist, number=0):
 	img.save('image' + str(number) + '.png')
 	print('done with converting')
 
-size = [500, 500]
-mapvalues, seedlist = generate_map(size, 500)
+size = [600, 600]
+mapvalues, seedlist = generate_map(size, 200)
 Colors(size, seedlist)
 mapcolor = color_in(mapvalues, seedlist)
 convert_to_image(mapcolor)
