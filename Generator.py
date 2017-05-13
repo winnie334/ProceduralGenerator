@@ -9,6 +9,7 @@ from PIL import Image
 from random import randint
 from math import sqrt, log
 from multiprocessing import Process, Queue
+from noise import pnoise2, snoise2
 
 
 class Centers:
@@ -22,23 +23,31 @@ class Centers:
 			Centers.list.append([x, y, size])
 
 
-class Colors:
-	list = []
-
-	def __init__(self, size, seedlist):
-		print('generating colors...')
-
-		Colors.list.append((0, 0, 0))
-		print('colors generated')
-
-
 class Seeds:
 	list = []
 
-	def __init__(self, pos):
+	def __init__(self, pos, height):
 		self.pos = pos
-		self.color = self.get_color()
+		self.height = height
+		self.color = self.get_colorheight()
 		Seeds.list.append(self)
+
+	def get_colorblack(self):
+		color = (self.height, self.height, self.height)
+		return color
+
+	def get_colorheight(self):
+		if self.height > 200:
+			newcolor = (self.height + randint(1, 3), self.height + randint(1, 3), self.height + randint(1, 3))  # snow
+		elif 200 >= self.height > 170:
+			newcolor = (230 - self.height, 230 - self.height + randint(1, 5), 220 - self.height)  # mountain
+		elif 170 >= self.height > 100:
+			newcolor = (randint(5, 10), 255 - self.height, 25 - int(self.height / 10))  # grass
+		elif 100 >= self.height > 60:
+			newcolor = (250 - self.height, 250 - self.height, randint(15, 25))  # beach color
+		else:
+			newcolor = (randint(15, 20), self.height + 25, self.height + 100)  # blue sea
+		return newcolor
 
 	def get_color(self):
 		closest = 1000000000
@@ -67,18 +76,33 @@ def get_distance(point1, point2):
 	return int(round(sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2), 0))
 
 
-def generate_map(size, seedamount):
+def generate_maps(size, seedamount):
 	print('generating empty map... (' + str(size[0]) + 'x' + str(size[1]) + ')')
-	fullmap = []
 	center = [size[0] / 2, size[1] / 2]
 
 	# we first generate the map list itself, and fill each pixel with a 0.
+	emptymap = []
 	for column in range(size[0]):
-		fullmap.append([])
+		emptymap.append([])
+
 	for row in range(size[1]):
 		for column in range(size[0]):
-			fullmap[column].append(column)
+			emptymap[column].append(column)
 	print('empty map generated')
+
+	# generate a copy of this map, but add height values to each position.
+	heightmap = []
+	for x in range(size[0] + 10):
+		heightmap.append([])
+	for y in range(size[1] + 10):
+		for x in range(size[0] + 10):
+			heightmap[x].append(0)
+	octaves = 2
+	freq = size[0]
+	rseed = randint(1, 1000000)
+	for x in range(size[0]):
+		for y in range(size[1]):
+			heightmap[x][y] = int(snoise2(y / freq, x / freq, octaves, persistence=0.25, base=rseed) * 127 + 110)
 
 	# now we select some random pixels that will become our seeds
 	print('generating seedlist... (' + str(seedamount) + ' seeds)')
@@ -99,14 +123,13 @@ def generate_map(size, seedamount):
 			reroll = 0
 			seed = [randint(0, size[0]), randint(0, size[1])]
 			for otherseed in Seeds.list:
-				if get_distance(seed, otherseed.pos) < size[0] / seedamount:
+				if get_distance(seed, otherseed.pos) <= size[0] / seedamount:
 					rerolls += 1
 					reroll = 1
-		if seed not in Seeds.list:
-			Seeds(seed)
+		Seeds(seed, heightmap[seed[0]][seed[1]])
 
 	print('seedlist generated (' + str(rerolls) + ' rerolls)')
-	return fullmap
+	return emptymap, heightmap
 
 
 def chunkit(seq, num):
@@ -122,6 +145,7 @@ def chunkit(seq, num):
 
 
 def divide_work(map, cores=1):
+	"""divides the map into columns, then assigns each column to a core"""
 	print('dividing the work over ' + str(cores) + ' cores...')
 	threadlist = []
 	mapqueue = Queue()
@@ -156,6 +180,7 @@ def divide_work(map, cores=1):
 
 
 def color_in(number, startpos, map, queue, progressqueue, seedlist, showseeds=False):
+	"""this does not really color in, but rather check for each pixel to what seed it belongs"""
 	print('Process ' + str(number) + ': going to color ' + str(len(map)) + ' columns!')
 	for x in range(len(map)):
 		for y in range(len(map[0])):
@@ -176,6 +201,7 @@ def color_in(number, startpos, map, queue, progressqueue, seedlist, showseeds=Fa
 
 
 def convert_to_image(pixellist, number=0):
+	"""takes a list of pixels, converts it to an image viewable by a human"""
 	print('converting to image...')
 	width = len(pixellist)
 	height = len(pixellist[0])
@@ -191,8 +217,6 @@ def convert_to_image(pixellist, number=0):
 
 if __name__ == '__main__':
 	size = [400, 400]
-	Centers(size, 1)
-	mapvalues = generate_map(size, 500)
-	#Colors(size)
-	mapcolor = divide_work(mapvalues, 7)
+	emptymap, heightmap = generate_maps(size, 500)
+	mapcolor = divide_work(emptymap, 7)
 	convert_to_image(mapcolor)
