@@ -27,29 +27,40 @@ class Colors:
 
 	def __init__(self, size, seedlist):
 		print('generating colors...')
-		for seed in seedlist:
-			closest = 1000000000
-			closestone = 0
-			for index, center in enumerate(Centers.list):
-				if get_distance(seed, center) < closest:
-					closestone = index
-					closest = get_distance(seed, center)
-			closestcenter = Centers.list[closestone]
-			dis = get_distance(seed, closestcenter[0:2])
-			dis = int(dis / 200 * closestcenter[2])
-			if dis > 200:
-				newcolor = (randint(30, 35), 200 - int(dis / 2), 500 - dis)		# blue sea
-			elif 200 >= dis > 150:
-				newcolor = (dis + 50, dis + 50, randint(15, 30))				# beach color
-			elif 150 >= dis > 70:
-				newcolor = (int(dis / 4), dis, int(dis / 4))							# grass
-			elif 70 >= dis > 30:
-				newcolor = (230 - dis, 230 - dis, 220 - dis)					# mountain
-			else:
-				newcolor = (255 - dis, 255 - dis, 255 - dis)					# snow
-			Colors.list.append(newcolor)
+
 		Colors.list.append((0, 0, 0))
 		print('colors generated')
+
+
+class Seeds:
+	list = []
+
+	def __init__(self, pos):
+		self.pos = pos
+		self.color = self.get_color()
+		Seeds.list.append(self)
+
+	def get_color(self):
+		closest = 1000000000
+		closestone = 0
+		for index, center in enumerate(Centers.list):
+			if get_distance(self.pos, center) < closest:
+				closestone = index
+				closest = get_distance(self.pos, center)
+		closestcenter = Centers.list[closestone]
+		dis = get_distance(self.pos, closestcenter[0:2])
+		dis = int(dis / 200 * closestcenter[2])
+		if dis > 200:
+			newcolor = (randint(15, 20), 225 - int(dis / 2), 500 - dis)  # blue sea
+		elif 200 >= dis > 150:
+			newcolor = (dis + 50, dis + 50, randint(15, 30))  # beach color
+		elif 150 >= dis > 70:
+			newcolor = (int(dis / 4), dis, int(dis / 4))  # grass
+		elif 70 >= dis > 30:
+			newcolor = (230 - dis, 230 - dis, 220 - dis)  # mountain
+		else:
+			newcolor = (255 - dis, 255 - dis, 255 - dis)  # snow
+		return newcolor
 
 
 def get_distance(point1, point2):
@@ -81,22 +92,21 @@ def generate_map(size, seedamount):
 		print('wait... WHAT THE HELL ARE YOU THINKING??')
 		print(str(seedamount) + ' SEEDS? THIS IS GOING TO TAKE AGES!')
 		print("anyway... I guess we'll continue...")
-	seedposlist = []
 	rerolls = 0
 	for _ in range(seedamount):
 		reroll = 1
 		while reroll == 1:
 			reroll = 0
 			seed = [randint(0, size[0]), randint(0, size[1])]
-			for otherseed in seedposlist:
-				if get_distance(seed, otherseed) < size[0] / seedamount:
+			for otherseed in Seeds.list:
+				if get_distance(seed, otherseed.pos) < size[0] / seedamount:
 					rerolls += 1
 					reroll = 1
-		if seed not in seedposlist:
-			seedposlist.append(seed)
+		if seed not in Seeds.list:
+			Seeds(seed)
 
 	print('seedlist generated (' + str(rerolls) + ' rerolls)')
-	return fullmap, seedposlist
+	return fullmap
 
 
 def chunkit(seq, num):
@@ -111,7 +121,7 @@ def chunkit(seq, num):
 	return out
 
 
-def divide_work(map, seedlist, cores=1):
+def divide_work(map, cores=1):
 	print('dividing the work over ' + str(cores) + ' cores...')
 	threadlist = []
 	mapqueue = Queue()
@@ -119,7 +129,7 @@ def divide_work(map, seedlist, cores=1):
 	splitmap = chunkit(map, cores)
 	for i in range(cores):
 		startpos = splitmap[i][0][0]
-		t = Process(target=color_in, args=(i, startpos, splitmap[i], seedlist, mapqueue, progressqueue, Colors.list,))
+		t = Process(target=color_in, args=(i, startpos, splitmap[i], mapqueue, progressqueue, Seeds.list,))
 		threadlist.append(t)
 	for thread in threadlist:
 		thread.start()
@@ -145,19 +155,19 @@ def divide_work(map, seedlist, cores=1):
 	return new
 
 
-def color_in(number, startpos, map, seedlist, queue, progressqueue, colorlist, showseeds=False):
+def color_in(number, startpos, map, queue, progressqueue, seedlist, showseeds=False):
 	print('Process ' + str(number) + ': going to color ' + str(len(map)) + ' columns!')
 	for x in range(len(map)):
 		for y in range(len(map[0])):
 			closest = 1000000000
 			closestone = 0
 			for index, seed in enumerate(seedlist):
-				if get_distance([x + startpos, y], seed) < closest:
+				if get_distance([x + startpos, y], seed.pos) < closest:
 					closestone = index
-					closest = get_distance([x + startpos, y], seed)
-				if get_distance([x + startpos, y], seed) < 3 and showseeds:
+					closest = get_distance([x + startpos, y], seed.pos)
+				if get_distance([x + startpos, y], seed.pos) < 3 and showseeds:
 					closestone = -1
-			color = colorlist[closestone]
+			color = seedlist[closestone].color
 			map[x][y] = color
 		progressqueue.put([100 * (x + 1) / len(map), number])
 	print('Process ' + str(number) + ': done coloring')
@@ -180,9 +190,9 @@ def convert_to_image(pixellist, number=0):
 	print('done with converting')
 
 if __name__ == '__main__':
-	size = [300, 300]
-	mapvalues, seedlist = generate_map(size, 600)
-	Centers(size, 2, 600)
-	Colors(size, seedlist)
-	mapcolor = divide_work(mapvalues, seedlist, 7)
+	size = [400, 400]
+	Centers(size, 1)
+	mapvalues = generate_map(size, 500)
+	#Colors(size)
+	mapcolor = divide_work(mapvalues, 7)
 	convert_to_image(mapcolor)
