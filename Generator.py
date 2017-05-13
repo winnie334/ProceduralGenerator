@@ -38,10 +38,10 @@ class Seeds:
 
 	def get_colorheight(self):
 		if self.height > 200:
-			newcolor = (self.height + randint(1, 3), self.height + randint(1, 3), self.height + randint(1, 3))  # snow
-		elif 200 >= self.height > 170:
+			newcolor = (self.height + randint(1, 8), self.height + randint(1, 8), self.height + randint(1, 8))  # snow
+		elif 200 >= self.height > 165:
 			newcolor = (230 - self.height, 230 - self.height + randint(1, 5), 220 - self.height)  # mountain
-		elif 170 >= self.height > 100:
+		elif 165 >= self.height > 100:
 			newcolor = (randint(5, 10), 255 - self.height, 25 - int(self.height / 10))  # grass
 		elif 100 >= self.height > 60:
 			newcolor = (250 - self.height, 250 - self.height, randint(15, 25))  # beach color
@@ -76,7 +76,7 @@ def get_distance(point1, point2):
 	return int(round(sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2), 0))
 
 
-def generate_maps(size, seedamount):
+def generate_maps(size, seedamount, freq, octaves, height, rseed=0):
 	print('generating empty map... (' + str(size[0]) + 'x' + str(size[1]) + ')')
 	center = [size[0] / 2, size[1] / 2]
 
@@ -97,12 +97,11 @@ def generate_maps(size, seedamount):
 	for y in range(size[1] + 10):
 		for x in range(size[0] + 10):
 			heightmap[x].append(0)
-	octaves = 2
-	freq = size[0]
-	rseed = randint(1, 1000000)
-	for x in range(size[0]):
-		for y in range(size[1]):
-			heightmap[x][y] = int(snoise2(y / freq, x / freq, octaves, persistence=0.25, base=rseed) * 127 + 110)
+	if rseed == 0:
+		rseed = randint(1, 1000000)
+	for x in range(size[0] + 5):
+		for y in range(size[1] + 5):
+			heightmap[x][y] = int(snoise2(y / freq, x / freq, octaves, persistence=0.25, base=rseed) * 127 + height)
 
 	# now we select some random pixels that will become our seeds
 	print('generating seedlist... (' + str(seedamount) + ' seeds)')
@@ -216,7 +215,11 @@ def convert_to_image(pixellist, number=0):
 	print('done with converting')
 
 if __name__ == '__main__':
-	size = [400, 400]
-	emptymap, heightmap = generate_maps(size, 500)
+	size = [600, 600]
+	seeds = 700
+	octaves = 1
+	frequency = 600
+	height = 118
+	emptymap, heightmap = generate_maps(size, seeds, frequency, octaves, height)
 	mapcolor = divide_work(emptymap, 7)
 	convert_to_image(mapcolor)
