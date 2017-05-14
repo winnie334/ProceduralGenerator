@@ -10,6 +10,7 @@ from random import randint
 from math import sqrt, log
 from multiprocessing import Process, Queue
 from noise import pnoise2, snoise2
+from time import clock
 
 
 class Centers:
@@ -38,11 +39,12 @@ class Seeds:
 
 	def get_colorheight(self):
 		if self.height > 200:
-			newcolor = (self.height + randint(1, 8), self.height + randint(1, 8), self.height + randint(1, 8))  # snow
+			newcolor = (self.height, self.height + randint(1, 5), self.height + randint(2, 7))			# snow
 		elif 200 >= self.height > 165:
-			newcolor = (230 - self.height, 230 - self.height + randint(1, 5), 220 - self.height)  # mountain
+			r = randint(20, 25)
+			newcolor = (int(self.height / 2) + r, int(self.height / 2) + r, int(self.height / 2) + r)  # mountain
 		elif 165 >= self.height > 100:
-			newcolor = (randint(5, 10), 255 - self.height, 25 - int(self.height / 10))  # grass
+			newcolor = (randint(25, 30), 255 - self.height, 35 - int(self.height / 10))  # grass
 		elif 100 >= self.height > 60:
 			newcolor = (250 - self.height, 250 - self.height, randint(15, 25))  # beach color
 		else:
@@ -76,7 +78,11 @@ def get_distance(point1, point2):
 	return int(round(sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2), 0))
 
 
-def generate_maps(size, seedamount, freq, octaves, height, rseed=0):
+def generate_maps(size, seedamount, freq, o, height, r):
+	estimated_time = size[0] * size[1] * seedamount / 936654
+	m, s = divmod(estimated_time, 60)
+	h, m = divmod(m, 60)
+	print('estimated duration: ' + str(h) + ' hours, ' + str(int(m)) + ' minutes and ' + str(int(s)) + ' seconds')
 	print('generating empty map... (' + str(size[0]) + 'x' + str(size[1]) + ')')
 	center = [size[0] / 2, size[1] / 2]
 
@@ -97,11 +103,9 @@ def generate_maps(size, seedamount, freq, octaves, height, rseed=0):
 	for y in range(size[1] + 10):
 		for x in range(size[0] + 10):
 			heightmap[x].append(0)
-	if rseed == 0:
-		rseed = randint(1, 1000000)
 	for x in range(size[0] + 5):
 		for y in range(size[1] + 5):
-			heightmap[x][y] = int(snoise2(y / freq, x / freq, octaves, persistence=0.25, base=rseed) * 127 + height)
+			heightmap[x][y] = int(snoise2(y / freq, x / freq, o, persistence=0.25, base=r) * 127 + height)
 
 	# now we select some random pixels that will become our seeds
 	print('generating seedlist... (' + str(seedamount) + ' seeds)')
@@ -199,7 +203,7 @@ def color_in(number, startpos, map, queue, progressqueue, seedlist, showseeds=Fa
 	queue.put(map)
 
 
-def convert_to_image(pixellist, number=0):
+def convert_to_image(pixellist, p, number=0):
 	"""takes a list of pixels, converts it to an image viewable by a human"""
 	print('converting to image...')
 	width = len(pixellist)
@@ -212,14 +216,30 @@ def convert_to_image(pixellist, number=0):
 	img = Image.new('RGB', [width, height])
 	img.putdata(fullList)
 	img.save('image' + str(number) + '.png')
+	dumpname = "s" + str(p[0]) + " o" + str(p[1]) + " f" + str(p[2]) + " h" + str(p[3]) + " r" + str(p[4])
+	img.save('imagedump\\' + dumpname + '.png')
 	print('done with converting')
 
+
+def time_stuff(starttime):
+	endtime = clock()
+	time_elapsed = endtime - starttime
+	minutes, seconds = divmod(time_elapsed, 60)
+	hours, minutes = divmod(minutes, 60)
+	print('done with generating image!')
+	print('time elapsed: ' + str(hours) + ' hours, ' + str(minutes) + ' minutes and ' + str(seconds) + ' seconds')
+
+
 if __name__ == '__main__':
-	size = [600, 600]
-	seeds = 700
+	starttime = clock()
+	size = [1000, 1000]
+	seeds = 600
 	octaves = 1
 	frequency = 600
-	height = 118
-	emptymap, heightmap = generate_maps(size, seeds, frequency, octaves, height)
+	height = 90
+	rseed = randint(1, 100000)
+	parameters = [seeds, octaves, frequency, height, rseed]
+	emptymap, heightmap = generate_maps(size, seeds, frequency, octaves, height, rseed)
 	mapcolor = divide_work(emptymap, 7)
-	convert_to_image(mapcolor)
+	convert_to_image(mapcolor, parameters)
+	time_stuff(starttime)
