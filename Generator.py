@@ -47,8 +47,10 @@ class Seeds:
 			newcolor = (randint(25, 30), 255 - self.height, 35 - int(self.height / 10))  # grass
 		elif 100 >= self.height > 60:
 			newcolor = (250 - self.height, 250 - self.height, randint(15, 25))  # beach color
+		elif 60 >= self.height >= -35:
+			newcolor = (randint(5, 10) - abs(int(self.height / 5)), self.height + 25, self.height + 100)  # light blue sea
 		else:
-			newcolor = (randint(15, 20), self.height + 25, self.height + 100)  # blue sea
+			newcolor = (10 + int(self.height / 10), 10 + int(self.height / 10), -int(3500 / self.height))  # deep sea
 		return newcolor
 
 	def get_color(self):
@@ -105,7 +107,8 @@ def generate_maps(size, seedamount, freq, o, height, r):
 			heightmap[x].append(0)
 	for x in range(size[0] + 5):
 		for y in range(size[1] + 5):
-			heightmap[x][y] = int(snoise2(y / freq, x / freq, o, persistence=0.25, base=r) * 127 + height)
+			ex = get_distance([x, y], center)
+			heightmap[x][y] = int(snoise2(y / freq, x / freq, o, persistence=0.25, base=r) * 127 + height - ex)
 
 	# now we select some random pixels that will become our seeds
 	print('generating seedlist... (' + str(seedamount) + ' seeds)')
@@ -232,11 +235,11 @@ def time_stuff(starttime):
 
 if __name__ == '__main__':
 	starttime = clock()
-	size = [1000, 1000]
-	seeds = 600
+	size = [500, 500]
+	seeds = 1200
 	octaves = 1
-	frequency = 600
-	height = 90
+	frequency = 200
+	height = 200
 	rseed = randint(1, 100000)
 	parameters = [seeds, octaves, frequency, height, rseed]
 	emptymap, heightmap = generate_maps(size, seeds, frequency, octaves, height, rseed)
